@@ -30,6 +30,105 @@ class SecurityTester:
             return False
 
     @staticmethod
+    def test_clickjacking(url):
+        logger.debug(f"Testing clickjacking protection for URL: {url}")
+        try:
+            response = requests.get(url)
+            headers = response.headers
+            x_frame_options = headers.get('X-Frame-Options', '').upper()
+            csp = headers.get('Content-Security-Policy', '')
+            
+            if not x_frame_options and 'frame-ancestors' not in csp:
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Clickjacking test error: {str(e)}")
+            return False
+
+    @staticmethod
+    def fuzz_test(url, endpoint="/api"):
+        logger.debug(f"Performing fuzz testing on URL: {url}{endpoint}")
+        try:
+            payloads = [
+                "' OR '1'='1",
+                "<script>alert(1)</script>",
+                "../../../etc/passwd",
+                "null",
+                "undefined",
+                "[]",
+                "{}",
+                "*" * 1000,
+            ]
+            
+            vulnerabilities = []
+            for payload in payloads:
+                try:
+                    response = requests.post(f"{url}{endpoint}", 
+                                          json={"data": payload}, 
+                                          timeout=5)
+                    if response.status_code >= 500:
+                        vulnerabilities.append(f"Server error with payload: {payload}")
+                except Exception as e:
+                    vulnerabilities.append(f"Unhandled error with payload: {payload}")
+            
+            return vulnerabilities
+        except Exception as e:
+            logger.error(f"Fuzz testing error: {str(e)}")
+            return []
+
+    @staticmethod
+    def test_access_control(url, endpoints=["/admin", "/api/users", "/settings"]):
+        logger.debug(f"Testing access control for URL: {url}")
+        try:
+            vulnerabilities = []
+            for endpoint in endpoints:
+                response = requests.get(f"{url}{endpoint}", allow_redirects=False)
+                if response.status_code not in [401, 403]:
+                    vulnerabilities.append(
+                        f"Endpoint {endpoint} might be accessible without proper authentication"
+                    )
+            return vulnerabilities
+        except Exception as e:
+            logger.error(f"Access control test error: {str(e)}")
+            return []
+
+    @staticmethod
+    def test_api_security(url, endpoints=["/api/v1/users", "/api/v1/data"]):
+        logger.debug(f"Testing API security for URL: {url}")
+        try:
+            vulnerabilities = []
+            
+            # Test rate limiting
+            for endpoint in endpoints:
+                responses = []
+                for _ in range(50):  # Send 50 requests rapidly
+                    response = requests.get(f"{url}{endpoint}")
+                    responses.append(response.status_code)
+                
+                if 429 not in responses:  # No rate limiting detected
+                    vulnerabilities.append(f"No rate limiting detected on {endpoint}")
+            
+            # Test input validation
+            invalid_inputs = [
+                {"id": "'; DROP TABLE users; --"},
+                {"email": "not_an_email"},
+                {"data": "a" * 10000}  # Very large input
+            ]
+            
+            for endpoint in endpoints:
+                for invalid_input in invalid_inputs:
+                    response = requests.post(f"{url}{endpoint}", json=invalid_input)
+                    if response.status_code != 400:  # Should reject invalid input
+                        vulnerabilities.append(
+                            f"No input validation on {endpoint} for {invalid_input}"
+                        )
+            
+            return vulnerabilities
+        except Exception as e:
+            logger.error(f"API security test error: {str(e)}")
+            return []
+
+    @staticmethod
     def test_sql_injection(url, param="id"):
         logger.debug(f"Testing SQL injection for URL: {url}")
         payloads = ["' OR '1'='1", "'; DROP TABLE users; --"]
@@ -104,6 +203,29 @@ class WebsiteAnalyzer:
 
             # Security checks
             security_score = 100
+            
+            # Clickjacking test
+            if self.security_tester.test_clickjacking(url):
+                security_score -= 10
+                results["securityIssues"].append("No protection against clickjacking detected")
+            
+            # Fuzz testing
+            fuzz_vulnerabilities = self.security_tester.fuzz_test(url)
+            if fuzz_vulnerabilities:
+                security_score -= 15
+                results["securityIssues"].extend(fuzz_vulnerabilities)
+            
+            # Access control testing
+            access_vulnerabilities = self.security_tester.test_access_control(url)
+            if access_vulnerabilities:
+                security_score -= 15
+                results["securityIssues"].extend(access_vulnerabilities)
+            
+            # API security testing
+            api_vulnerabilities = self.security_tester.test_api_security(url)
+            if api_vulnerabilities:
+                security_score -= 15
+                results["securityIssues"].extend(api_vulnerabilities)
             
             # XSS Check
             if self.security_tester.test_xss(url):
