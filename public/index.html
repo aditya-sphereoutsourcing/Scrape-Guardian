@@ -1,0 +1,70 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Website Analyzer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #result {
+            margin-top: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        input {
+            padding: 10px;
+            width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Website Analyzer</h1>
+    <div>
+        <input type="url" id="url" placeholder="Enter website URL (e.g., https://example.com)">
+        <button onclick="analyzeWebsite()">Analyze</button>
+    </div>
+    <div id="result"></div>
+
+    <script>
+        async function analyzeWebsite() {
+            const url = document.getElementById('url').value;
+            const result = document.getElementById('result');
+            result.textContent = 'Analyzing...';
+            
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({url})
+                });
+                const data = await response.json();
+                if (data.error) {
+                    result.textContent = `Error: ${data.error}`;
+                } else {
+                    result.innerHTML = `
+                        <h2>Analysis Complete!</h2>
+                        <p>Security Score: ${data.results.ratings.security}%</p>
+                        <p>SEO Score: ${data.results.ratings.seo}%</p>
+                        <p>Performance Score: ${data.results.ratings.performance}%</p>
+                        <p>Overall Score: ${data.results.ratings.overall.toFixed(1)}%</p>
+                        <a href="/analysis-report.pdf" target="_blank">Download PDF Report</a>
+                    `;
+                }
+            } catch (error) {
+                result.textContent = `Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
