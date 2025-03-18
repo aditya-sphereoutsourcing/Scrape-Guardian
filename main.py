@@ -310,4 +310,7 @@ def serve_pdf():
     return send_file('analysis-report.pdf')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=3000)
+    try:
+        app.run(host='0.0.0.0', port=3000, debug=True)
+    except Exception as e:
+        print(f"Server failed to start: {e}")
